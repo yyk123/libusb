@@ -1,6 +1,9 @@
+/* -*- Mode: C; indent-tabs-mode:t ; c-basic-offset:8 -*- */
 /*
  * Synchronous I/O functions for libusb
  * Copyright © 2007-2008 Daniel Drake <dsd@gentoo.org>
+ * Copyright © 2019 Nathan Hjelm <hjelmn@cs.unm.edu>
+ * Copyright © 2019 Google LLC. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,14 +20,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <config.h>
-
-#include <errno.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include "libusbi.h"
+
+#include <string.h>
 
 /**
  * @defgroup libusb_syncio Synchronous device I/O
@@ -56,6 +54,11 @@ static void sync_transfer_wait_for_completion(struct libusb_transfer *transfer)
 				 libusb_error_name(r));
 			libusb_cancel_transfer(transfer);
 			continue;
+		}
+		if (NULL == transfer->dev_handle) {
+			/* transfer completion after libusb_close() */
+			transfer->status = LIBUSB_TRANSFER_NO_DEVICE;
+			*completed = 1;
 		}
 	}
 }
@@ -107,7 +110,7 @@ int API_EXPORTED libusb_control_transfer(libusb_device_handle *dev_handle,
 	if (!transfer)
 		return LIBUSB_ERROR_NO_MEM;
 
-	buffer = (unsigned char*) malloc(LIBUSB_CONTROL_SETUP_SIZE + wLength);
+	buffer = malloc(LIBUSB_CONTROL_SETUP_SIZE + wLength);
 	if (!buffer) {
 		libusb_free_transfer(transfer);
 		return LIBUSB_ERROR_NO_MEM;
@@ -266,9 +269,9 @@ static int do_sync_bulk_transfer(struct libusb_device_handle *dev_handle,
  * \returns LIBUSB_ERROR_BUSY if called from event handling context
  * \returns another LIBUSB_ERROR code on other failures
  */
-int API_EXPORTED libusb_bulk_transfer(struct libusb_device_handle *dev_handle,
-	unsigned char endpoint, unsigned char *data, int length, int *transferred,
-	unsigned int timeout)
+int API_EXPORTED libusb_bulk_transfer(libusb_device_handle *dev_handle,
+	unsigned char endpoint, unsigned char *data, int length,
+	int *transferred, unsigned int timeout)
 {
 	return do_sync_bulk_transfer(dev_handle, endpoint, data, length,
 		transferred, timeout, LIBUSB_TRANSFER_TYPE_BULK);
@@ -318,9 +321,9 @@ int API_EXPORTED libusb_bulk_transfer(struct libusb_device_handle *dev_handle,
  * \returns LIBUSB_ERROR_BUSY if called from event handling context
  * \returns another LIBUSB_ERROR code on other error
  */
-int API_EXPORTED libusb_interrupt_transfer(
-	struct libusb_device_handle *dev_handle, unsigned char endpoint,
-	unsigned char *data, int length, int *transferred, unsigned int timeout)
+int API_EXPORTED libusb_interrupt_transfer(libusb_device_handle *dev_handle,
+	unsigned char endpoint, unsigned char *data, int length,
+	int *transferred, unsigned int timeout)
 {
 	return do_sync_bulk_transfer(dev_handle, endpoint, data, length,
 		transferred, timeout, LIBUSB_TRANSFER_TYPE_INTERRUPT);

@@ -110,7 +110,7 @@ WatchedEntry::WatchedEntry(BMessenger *messenger, entry_ref *ref)
 					usbi_dbg("device allocation failed");
 					continue;
 				}
-				*((USBDevice **)dev->os_priv) = fDevice;
+				*((USBDevice **)usbi_get_device_priv(dev)) = fDevice;
 
 				// Calculate pseudo-device-address
 				int addr, tmp;
@@ -125,8 +125,13 @@ WatchedEntry::WatchedEntry(BMessenger *messenger, entry_ref *ref)
 					addr += tmp + 1;
 					parent_path.GetParent(&parent_path);
 				}
-				sscanf(path.Path(), "/dev/bus/usb/%d", &dev->bus_number);
+				sscanf(path.Path(), "/dev/bus/usb/%hhu", &dev->bus_number);
 				dev->device_address = addr - (dev->bus_number + 1);
+
+				static_assert(sizeof(dev->device_descriptor) == sizeof(usb_device_descriptor),
+					      "mismatch between libusb and OS device descriptor sizes");
+				memcpy(&dev->device_descriptor, fDevice->Descriptor(), LIBUSB_DT_DEVICE_SIZE);
+				usbi_localize_device_descriptor(&dev->device_descriptor);
 
 				if (usbi_sanitize_device(dev) < 0) {
 					usbi_dbg("device sanitization failed");
